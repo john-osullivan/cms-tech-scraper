@@ -3,6 +3,8 @@ import urllib2
 import re
 import csv
 
+KEYWORDS = ['death', 'died', 'dead', 'suicide', 'dies', 'kills himself', 'kills herself', 'takes life',]
+
 def get_soup(url):
     '''
     This is a helper function which just spits out the soup for a URL.
@@ -101,15 +103,59 @@ def build_headline_list():
     print "There were " + str(len(headline_list)) + " headlines found in total."
     return headline_list
 
+def get_filtered_articles(headline_list):
+    '''
+    Filters through a list of headline tuples, where each tuple is (headline_text, headline_url, publication_date).
+    Draws from a global KEYWORDS variable to filter through each headline, returning a list of all headlines
+    which contained a keyword from the list.
+    '''
+
+    # Make a list to store all the desired headlines.
+    filtered_list = []
+
+    # And start iterating through the headlines...
+    print "About to start filtering through {0} headlines, searching for ones which contain any of these keywords: {1}".format(str(len(headline_list)), KEYWORDS)
+    print "..."
+    for headline_entry in headline_list:
+
+        # Grab the text out of each one and rip it into lowercase words with a regex & a list comprehension.
+        (headline, url, date) = headline_entry
+        headline_words = [word.lower() for word in re.compile('\w+').findall(headline)]
+
+        # If the headline has a word which is also in KEYWORDS, add the entry to the list.
+        if len([word for word in headline_words if word in KEYWORDS]) > 0:
+            filtered_list.append(headline_entry)
+
+    # And round it all up by returning that list.
+    print "Found {0} headlines total -- returning now.".format(str(len(filtered_list)))
+    return filtered_list
+
+def write_to_csv(heading_list, entry_list, filename):
+    '''
+    This method encapuslates all the logic behind writing a .csv given a heading row,
+    list of entries, and an output filename.
+    '''
+
+    # Open up a context with the file.
+    with open(filename, 'wb') as out:
+
+        # Make a csv writer and add in the header row.
+        csv_out = csv.writer(out)
+        csv_out.writerow(heading_list)
+
+        # Finally, write all the rows!  The list comprehension makes sure any screwy
+        # characters get converted over into unicode.
+        print "Writing {0} rows to {1}.".format(str(len(entry_list)), filename)
+        for row in entry_list:
+            csv_out.writerow([unicode(s).encode('utf-8') for s in row])
+
 if __name__ == '__main__':
     '''
     This is what actually runs.  It gets all the headline tuples, 
     then writes 'em to a .csv. Fun, fun, fun.
     '''
-    headlines = build_headline_list()
+    all_headlines = build_headline_list()
+    filtered_headlines = get_filtered_articles(all_headlines)
+    write_to_csv(['Headline', 'URL', 'Date'], filtered_headlines, 'filtered_headlines.csv')
 
-    with open('headlines.csv', 'wb') as out:
-        csv_out = csv.writer(out)
-        csv_out.writerow(['Headline Text', 'Headline Link', 'Headline Date'])
-        for row in headlines:
-            csv_out.writerow([unicode(s).encode('utf-8') for s in row])
+    
