@@ -3,7 +3,7 @@ import urllib2
 import re
 import csv
 
-KEYWORDS = ['death', 'died', 'dead', 'suicide', 'dies', 'kills himself', 'kills herself', 'takes life',]
+KEYWORDS = ['death', 'died', 'dead', 'suicide', 'dies', 'kills himself', 'kills herself', 'takes life', 'fell']
 
 def get_soup(url):
     '''
