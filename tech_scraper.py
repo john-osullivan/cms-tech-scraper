@@ -3,15 +3,24 @@ import urllib2
 import re
 import csv
 
-KEYWORDS = ['death', 'died', 'dead', 'suicide', 'dies', 'kills himself', 'kills herself', 'takes life', 'fell']
+KEYWORDS = ['death', 'died', 'dead', 'suicide', 'dies', 'kills himself', 'kills herself', 'takes life']
 
 def get_soup(url):
     '''
     This is a helper function which just spits out the soup for a URL.
     Saves a couple lines, right?  Why not.
     '''
-    page = urllib2.urlopen(url)
-    return BeautifulSoup(page.read())
+    try:
+        page = urllib2.urlopen(url)
+        return BeautifulSoup(page.read())
+    except Exception:
+        try:
+            url_plus = url + '.html'
+            page = urllib2.urlopen(url_plus)
+            return BeautifulSoup(page.read())
+        except Exception:
+            print "URL {0} could not be opened.".format(url)
+            return None
 
 def get_issue_links():
     '''
@@ -20,10 +29,10 @@ def get_issue_links():
     '''
 
     # First, build a list of every volume url from Volume 109 (1990) to 135 (2015).
-    url_base = 'http://tech.mit.edu/V'
+    url_base = 'http://tech.mit.edu'
     volume_urls = []
     for i in range(109,136):
-        volume_urls.append(url_base+str(i)+'/')
+        volume_urls.append(url_base+'/V'+str(i)+'/')
 
     # Then, open each of their soups and add all the issue tags to a list.
     issue_tags = []
@@ -35,18 +44,10 @@ def get_issue_links():
     # convert it into an actually useful link.
     issue_urls = []
     for tag in issue_tags:
-        tag = str(tag)
-        
-        # Grab characters [11:19] from the <a> tag to get the part of the link we
-        # want.  General solution?  No.  Functional solution?  YES.
-        clean_url = url_base+tag[11:19]
 
-        # Downside of a sketchy solution is that you need sketchy cleanup.
-        # This if statement handles the special case of issue numbers less than 10.
-        if clean_url[-1] == '"':
-            clean_url = clean_url[:-1]
-
-        # Anyways, actually append this now-clean url to the list.
+        # Use BeautifulSoup's property reference system to get the 'href', add
+        # it onto the tech.mit.edu link base and we're, ready to rock!
+        clean_url = url_base + tag['href']
         issue_urls.append(clean_url) 
     
     # Finally, return our big ol' list of urls.
@@ -64,6 +65,7 @@ def build_headline_list():
     # First, get ALL OF THE LINKS to ALL OF THE ISSUES.
     issue_urls = get_issue_links()
     headline_list = []
+    url_base = 'http://tech.mit.edu'
 
     #Now, for each url in the list...
     for issue_url in issue_urls:
@@ -91,8 +93,21 @@ def build_headline_list():
                 for article_link in main_links[3:]:
                     try:
 
-                        # Add in the (headline, url, date) tuple to our headline list.
-                        headline_list.append((article_link.text, issue_url+article_link['href'][0:], pub_date))
+                        # Check if the href already includes the '/V###/N##' part.
+                        prefixed = len(re.compile('^/V[\d]+/N[\d]+').findall(article_link['href'])) > 0
+
+                        # Filter out the author URLs.
+                        if len(re.compile('/author/').findall(article_link['href'])) > 0:
+                            continue
+
+                        # If it does, add the href onto the url_base.  If not, add the href to the issue_url.
+                        if prefixed:
+                            article_url = url_base + article_link['href']
+                        else:
+                            article_url = issue_url + article_link['href']
+
+                        # Finally, append the article onto our big list.
+                        headline_list.append((article_link.text, article_url, pub_date))
                     except KeyError:
                         print "Headline append failed for this tag: " + article_link
         except Exception:
@@ -114,21 +129,40 @@ def get_filtered_articles(headline_list):
     filtered_list = []
 
     # And start iterating through the headlines...
-    print "About to start filtering through {0} headlines, searching for ones which contain any of these keywords: {1}".format(str(len(headline_list)), KEYWORDS)
+    print "About to start filtering through {0} articles, searching for ones which contain any of these keywords: {1}".format(str(len(headline_list)), KEYWORDS)
     print "..."
     for headline_entry in headline_list:
 
         # Grab the text out of each one and rip it into lowercase words with a regex & a list comprehension.
         (headline, url, date) = headline_entry
-        headline_words = [word.lower() for word in re.compile('\w+').findall(headline)]
-
-        # If the headline has a word which is also in KEYWORDS, add the entry to the list.
-        if len([word for word in headline_words if word in KEYWORDS]) > 0:
+        if (filter_article(url) == True):
             filtered_list.append(headline_entry)
 
     # And round it all up by returning that list.
-    print "Found {0} headlines total -- returning now.".format(str(len(filtered_list)))
+    print "Found {0} articles total -- returning now.".format(str(len(filtered_list)))
     return filtered_list
+
+def filter_article(article_url):
+    '''
+    Performs the filtering on articles to check if the headline or text contains any of our KEYWORDS.
+    If they do, this returns True.  If not, it returns False.
+    '''
+    # First, make sure this link isn't to an image.
+    if article_url[-3:] in ['gif', 'jpg']:
+        return False
+
+    article_soup = get_soup(article_url)
+    if article_soup is None:
+        print "The soup for article {0} didn't work, filtered it out.".format(article_url)
+        return False
+    else:
+        try:
+            main_div = article_soup.div(id='main')
+            words = set([word.lower() for word in re.compile('\w+').findall(str(main_div))])
+            return len([word for word in KEYWORDS if word in words]) > 0
+        except Exception as e:
+            print "Exception: ",e
+            print "The URL being filtered was: {0}".format(article_url)
 
 def write_to_csv(heading_list, entry_list, filename):
     '''
@@ -157,5 +191,4 @@ if __name__ == '__main__':
     all_headlines = build_headline_list()
     filtered_headlines = get_filtered_articles(all_headlines)
     write_to_csv(['Headline', 'URL', 'Date'], filtered_headlines, 'filtered_headlines.csv')
-
-    
+    # print re.compile('^/V[\d]+/N[\d]+').findall("/V119/N46/Our_Lady_Peace.46a.html")
