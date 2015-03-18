@@ -24,11 +24,11 @@ def get_soup(url):
 
 def get_issue_links():
     '''
-    This function iterates through all the Volume pages going back through 1990
+    This function iterates through all the Volume pages going back through 1989
     and returns a list of all the Issue links contained on each one.  
     '''
 
-    # First, build a list of every volume url from Volume 109 (1990) to 135 (2015).
+    # First, build a list of every volume url from Volume 109 (1989) to 135 (2015).
     url_base = 'http://tech.mit.edu'
     volume_urls = []
     for i in range(109,136):
@@ -128,17 +128,19 @@ def get_filtered_articles(headline_list):
     # Make a list to store all the desired headlines.
     filtered_list = []
 
-    # And start iterating through the headlines...
+    # Then start iterating through the headlines...
     print "About to start filtering through {0} articles, searching for ones which contain any of these keywords: {1}".format(str(len(headline_list)), KEYWORDS)
     print "..."
     for headline_entry in headline_list:
 
-        # Grab the text out of each one and rip it into lowercase words with a regex & a list comprehension.
+        # Use the URL to check if the article contains any of our keywords...
         (headline, url, date) = headline_entry
-        if (filter_article(url) == True):
+        if filter_article(url):
+
+            # ... and append it to our list if it does.
             filtered_list.append(headline_entry)
 
-    # And round it all up by returning that list.
+    # Finally, round it all up by returning that list.
     print "Found {0} articles total -- returning now.".format(str(len(filtered_list)))
     return filtered_list
 
@@ -151,15 +153,22 @@ def filter_article(article_url):
     if article_url[-3:] in ['gif', 'jpg']:
         return False
 
+    # Next, get the BeautifulSoup of the article...
     article_soup = get_soup(article_url)
     if article_soup is None:
-        print "The soup for article {0} didn't work, filtered it out.".format(article_url)
         return False
     else:
         try:
+
+            # ... and grab its 'main' div which contains the story.
             main_div = article_soup.div(id='main')
+
+            # Use a regex to strip all the words out of the main div, then lowercase them.
             words = set([word.lower() for word in re.compile('\w+').findall(str(main_div))])
+
+            # Finally, return whether any of the KEYWORDS also appeared in the article.
             return len([word for word in KEYWORDS if word in words]) > 0
+        
         except Exception as e:
             print "Exception: ",e
             print "The URL being filtered was: {0}".format(article_url)
@@ -191,4 +200,3 @@ if __name__ == '__main__':
     all_headlines = build_headline_list()
     filtered_headlines = get_filtered_articles(all_headlines)
     write_to_csv(['Headline', 'URL', 'Date'], filtered_headlines, 'filtered_headlines.csv')
-    # print re.compile('^/V[\d]+/N[\d]+').findall("/V119/N46/Our_Lady_Peace.46a.html")
